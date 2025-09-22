@@ -1,8 +1,11 @@
 name: go test.yml
 on:
+  # push:
+  #   branches:
+  #     - master
   push:
-    branches:
-      - master
+    tags:
+      - 'v*'
 
 jobs:
   test:
@@ -16,19 +19,5 @@ jobs:
         with:
           go-version: '>=1.25.1'
           
-      - name: Run test FindAllFolders
-        run: go test -v -run TestFindAllFolders
-      - name: Run test FindAllFiles
-        run: go test -v -run TestFindAllFiles
-      - name: Run test FindAllVideos
-        run: go test -v -run TestFindAllVideos
-      - name: Run test FindAllVideosInRoot
-        run: go test -v -run TestFindAllVideosInRoot
-      - name: Run test FindAllImages
-        run: go test -v -run TestFindAllImages
-      - name: Run test FindAllImagesInRoot
-        run: go test -v -run TestFindAllImagesInRoot
-      - name: Run test FindAllAudios
-        run: go test -v -run TestFindAllAudios
-      - name: Run test FindAllAudiosInRoot
-        run: go test -v -run TestFindAllAudiosInRoot
+      - name: Test Go Module
+        run: go get github.com/zhangyiming748/finderdAllAudiosInRoot

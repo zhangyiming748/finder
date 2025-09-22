@@ -24,10 +24,11 @@ func FindAllFolders(root string) []string {
 }
 
 /*
-使用golang实现find <root> type f 命令
+使用golang实现find <root> type f 命令,包含root文件夹本身
 */
 func FindAllFiles(root string) []string {
 	var files []string
+	files = append(files, root)
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // 忽略错误，继续遍历

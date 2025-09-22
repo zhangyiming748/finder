@@ -20,4 +20,5 @@ jobs:
           go-version: '>=1.25.1'
           
       - name: Test Go Module
-        run: go get github.com/zhangyiming748/finder
+        run: |
+          go vet

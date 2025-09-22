@@ -49,6 +49,7 @@ func FindAllVideosInRoot(root string) []string {
 
 func isVideo(fp string) bool {
 	file, _ := os.Open(fp)
+	defer file.Close()
 	head := make([]byte, 261)
 	file.Read(head)
 	if filetype.IsVideo(head) {

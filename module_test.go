@@ -20,8 +20,7 @@ func TestFindAllFolders(t *testing.T) {
 	}
 
 	// Step 3: 执行测试
-	result:= FindAllFolders(tempDir)
-	
+	result := FindAllFolders(tempDir)
 
 	// Step 4: 验证结果数量
 	expectedCount := len(folders)
@@ -68,7 +67,6 @@ func TestFindAllFiles(t *testing.T) {
 
 	// Step 3: 执行测试
 	result := FindAllFiles(tempDir)
-	
 
 	// Step 4: 验证结果数量
 	expectedCount := len(files)
@@ -126,7 +124,6 @@ func TestFindAllVideos(t *testing.T) {
 
 	// Step 6: 执行测试
 	result := FindAllVideos(tempDir)
-	
 
 	// Step 7: 验证结果数量
 	expectedCount := len(videoFiles)
@@ -184,7 +181,6 @@ func TestFindAllVideosInRoot(t *testing.T) {
 
 	// Step 6: 执行测试
 	result := FindAllVideosInRoot(tempDir)
-	
 
 	// Step 7: 验证结果数量（应该只包含根目录的视频文件）
 	expectedCount := len(rootVideoFiles)
@@ -251,7 +247,6 @@ func TestFindAllImages(t *testing.T) {
 
 	// Step 6: 执行测试
 	result := FindAllImages(tempDir)
-	
 
 	// Step 7: 验证结果数量
 	expectedCount := len(imageFiles)
@@ -309,7 +304,6 @@ func TestFindAllImagesInRoot(t *testing.T) {
 
 	// Step 6: 执行测试
 	result := FindAllImagesInRoot(tempDir)
-	
 
 	// Step 7: 验证结果数量（应该只包含根目录的图像文件）
 	expectedCount := len(rootImageFiles)
@@ -376,7 +370,7 @@ func TestFindAllAudios(t *testing.T) {
 
 	// Step 6: 执行测试
 	result := FindAllAudios(tempDir)
-	
+
 	// Step 7: 验证结果数量
 	expectedCount := len(audioFiles)
 	if len(result) != expectedCount {
@@ -433,7 +427,6 @@ func TestFindAllAudiosInRoot(t *testing.T) {
 
 	// Step 6: 执行测试
 	result := FindAllAudiosInRoot(tempDir)
-	
 
 	// Step 7: 验证结果数量（应该只包含根目录的音频文件）
 	expectedCount := len(rootAudioFiles)

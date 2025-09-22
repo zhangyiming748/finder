@@ -1,7 +1,6 @@
 package finder
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -27,6 +26,7 @@ func FindAllImages(root string) []string {
 	})
 	return files
 }
+
 /*
 使用golang实现查找给定文件路径下的全部文件 不包含子目录
 */
@@ -52,11 +52,8 @@ func isImage(fp string) bool {
 	head := make([]byte, 261)
 	file.Read(head)
 	if filetype.IsImage(head) {
-		fmt.Printf("%v is an image\n", fp)
 		return true
 	} else {
-		fmt.Printf("%v Not an image\n", fp)
 		return false
 	}
 }
-

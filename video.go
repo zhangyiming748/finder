@@ -3,6 +3,7 @@ package finder
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/h2non/filetype"
 )
@@ -52,7 +53,12 @@ func isVideo(fp string) bool {
 	defer file.Close()
 	head := make([]byte, 261)
 	file.Read(head)
+	ext := strings.ToLower(filepath.Ext(fp))
 	if filetype.IsVideo(head) {
+		return true
+	} else if ext == ".rmvb" {
+		return true
+	} else if ext == ".rm" {
 		return true
 	} else {
 		return false

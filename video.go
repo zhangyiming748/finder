@@ -9,7 +9,7 @@ import (
 )
 
 /*
-使用golang实现find <root> type f 命令
+使用golang实现find <root> -type f 命令
 */
 func FindAllVideos(root string) []string {
 	var files []string
@@ -21,6 +21,28 @@ func FindAllVideos(root string) []string {
 			absPath, _ := filepath.Abs(path)
 			if isVideo(absPath) {
 				files = append(files, absPath)
+			}
+		}
+		return nil
+	})
+	return files
+}
+
+/*
+使用golang实现find <root> -type f -name "*.mkv" 命令
+*/
+func FindAllMkvVideos(root string) []string {
+	var files []string
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // 忽略错误，继续遍历
+		}
+		if !info.IsDir() {
+			absPath, _ := filepath.Abs(path)
+			if isVideo(absPath) {
+				if strings.ToLower(filepath.Ext(absPath)) == ".mkv" {
+					files = append(files, absPath)
+				}
 			}
 		}
 		return nil

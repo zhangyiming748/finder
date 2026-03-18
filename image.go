@@ -3,6 +3,7 @@ package finder
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/h2non/filetype"
 )
@@ -48,6 +49,10 @@ func FindAllImagesInRoot(root string) []string {
 }
 
 func isImage(fp string) bool {
+	if strings.ToLower(filepath.Ext(fp)) == ".avif" {
+		// avif文件的magic number比较特殊，filetype库无法识别，所以直接通过后缀名判断
+		return true
+	}
 	file, _ := os.Open(fp)
 	defer file.Close()
 	head := make([]byte, 261)

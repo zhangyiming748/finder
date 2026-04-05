@@ -78,11 +78,13 @@ func isVideo(fp string) bool {
 	ext := strings.ToLower(filepath.Ext(fp))
 	if filetype.IsVideo(head) {
 		return true
-	} else if ext == ".rmvb" {
+	} else if strings.ToLower(ext) == ".rmvb" {
 		return true
-	} else if ext == ".rm" {
+	} else if strings.ToLower(ext) == ".rm" {
 		return true
-	} else {
+	} else if strings.ToLower(ext) == ".vob" {
+
+	}else {
 		return false
 	}
 }

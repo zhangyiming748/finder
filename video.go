@@ -84,7 +84,9 @@ func isVideo(fp string) bool {
 		return true
 	} else if strings.ToLower(ext) == ".vob" {
 		return true
-	} else {
+	} else if strings.ToLower(ext) == ".flv" {
+		return true
+	}else {
 		return false
 	}
 }

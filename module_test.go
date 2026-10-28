@@ -3,8 +3,45 @@ package finder
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// 最小可识别的文件头，让 filetype 能把测试文件识别为图片 / 音频
+var (
+	pngHeader  = []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	jpegHeader = []byte{0xFF, 0xD8, 0xFF, 0xE0}
+	gifHeader  = []byte("GIF89a")
+	mp3Header  = []byte("ID3\x04\x00\x00\x00\x00\x00\x00")
+	wavHeader  = []byte("RIFF\x24\x00\x00\x00WAVEfmt ")
+	oggHeader  = []byte("OggS\x00\x02\x00\x00")
+)
+
+func mediaHeader(ext string) []byte {
+	switch strings.ToLower(ext) {
+	case ".png":
+		return pngHeader
+	case ".jpg", ".jpeg":
+		return jpegHeader
+	case ".gif":
+		return gifHeader
+	case ".mp3":
+		return mp3Header
+	case ".wav":
+		return wavHeader
+	case ".ogg":
+		return oggHeader
+	default:
+		return nil
+	}
+}
+
+func writeTestFile(t *testing.T, path string, content []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("Failed to create test file %s: %v", path, err)
+	}
+}
 
 func TestFindAllFolders(t *testing.T) {
 	// Step 1: 创建临时测试目录结构
@@ -22,8 +59,8 @@ func TestFindAllFolders(t *testing.T) {
 	// Step 3: 执行测试
 	result := FindAllFolders(tempDir)
 
-	// Step 4: 验证结果数量
-	expectedCount := len(folders)
+	// Step 4: 验证结果数量（FindAllFolders 会把 root 本身也计入结果）
+	expectedCount := len(folders) + 1
 	if len(result) != expectedCount {
 		t.Errorf("Expected %d folders, got %d", expectedCount, len(result))
 	}
@@ -39,6 +76,10 @@ func TestFindAllFolders(t *testing.T) {
 		if !folderMap[expectedPath] {
 			t.Errorf("Expected folder %s not found in result", expectedPath)
 		}
+	}
+
+	if !folderMap[tempDir] {
+		t.Errorf("Expected root folder %s not found in result", tempDir)
 	}
 }
 
@@ -68,8 +109,8 @@ func TestFindAllFiles(t *testing.T) {
 	// Step 3: 执行测试
 	result := FindAllFiles(tempDir)
 
-	// Step 4: 验证结果数量
-	expectedCount := len(files)
+	// Step 4: 验证结果数量（FindAllFiles 会把 root 本身也计入结果）
+	expectedCount := len(files) + 1
 	if len(result) != expectedCount {
 		t.Errorf("Expected %d files, got %d", expectedCount, len(result))
 	}
@@ -85,6 +126,10 @@ func TestFindAllFiles(t *testing.T) {
 		if !fileMap[expectedPath] {
 			t.Errorf("Expected file %s not found in result", expectedPath)
 		}
+	}
+
+	if !fileMap[tempDir] {
+		t.Errorf("Expected root %s not found in result", tempDir)
 	}
 }
 
@@ -225,14 +270,10 @@ func TestFindAllImages(t *testing.T) {
 		t.Fatalf("Failed to create sub directory: %v", err)
 	}
 
-	// Step 4: 创建图像文件
+	// Step 4: 创建图像文件（写入真实文件头，保证能被 filetype 识别）
 	for _, file := range imageFiles {
 		fullPath := filepath.Join(tempDir, file)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			t.Fatalf("Failed to create test image file %s: %v", file, err)
-		}
-		f.Close()
+		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
 	// Step 5: 创建其他类型文件
@@ -282,24 +323,16 @@ func TestFindAllImagesInRoot(t *testing.T) {
 	rootImageFiles := []string{"image1.jpg", "image2.png"}
 	subImageFiles := []string{"sub/image3.gif"}
 
-	// Step 4: 创建根目录图像文件
+	// Step 4: 创建根目录图像文件（写入真实文件头，保证能被 filetype 识别）
 	for _, file := range rootImageFiles {
 		fullPath := filepath.Join(tempDir, file)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			t.Fatalf("Failed to create test image file %s: %v", file, err)
-		}
-		f.Close()
+		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
-	// Step 5: 创建子目录图像文件
+	// Step 5: 创建子目录图像文件（写入真实文件头，保证能被 filetype 识别）
 	for _, file := range subImageFiles {
 		fullPath := filepath.Join(tempDir, file)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			t.Fatalf("Failed to create test image file %s: %v", file, err)
-		}
-		f.Close()
+		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
 	// Step 6: 执行测试
@@ -348,14 +381,10 @@ func TestFindAllAudios(t *testing.T) {
 		t.Fatalf("Failed to create sub directory: %v", err)
 	}
 
-	// Step 4: 创建音频文件
+	// Step 4: 创建音频文件（写入真实文件头，保证能被 filetype 识别）
 	for _, file := range audioFiles {
 		fullPath := filepath.Join(tempDir, file)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			t.Fatalf("Failed to create test audio file %s: %v", file, err)
-		}
-		f.Close()
+		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
 	// Step 5: 创建其他类型文件
@@ -405,24 +434,16 @@ func TestFindAllAudiosInRoot(t *testing.T) {
 	rootAudioFiles := []string{"audio1.mp3", "audio2.wav"}
 	subAudioFiles := []string{"sub/audio3.ogg"}
 
-	// Step 4: 创建根目录音频文件
+	// Step 4: 创建根目录音频文件（写入真实文件头，保证能被 filetype 识别）
 	for _, file := range rootAudioFiles {
 		fullPath := filepath.Join(tempDir, file)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			t.Fatalf("Failed to create test audio file %s: %v", file, err)
-		}
-		f.Close()
+		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
-	// Step 5: 创建子目录音频文件
+	// Step 5: 创建子目录音频文件（写入真实文件头，保证能被 filetype 识别）
 	for _, file := range subAudioFiles {
 		fullPath := filepath.Join(tempDir, file)
-		f, err := os.Create(fullPath)
-		if err != nil {
-			t.Fatalf("Failed to create test audio file %s: %v", file, err)
-		}
-		f.Close()
+		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
 	// Step 6: 执行测试

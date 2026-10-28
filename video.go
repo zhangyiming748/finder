@@ -1,12 +1,28 @@
 package finder
 
 import (
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/h2non/filetype"
 )
+
+// 常见视频扩展名，第一步仅凭扩展名即可认定是视频文件
+var videoExtensions = map[string]struct{}{
+	".3g2": {}, ".3gp": {}, ".amv": {}, ".asf": {}, ".avi": {}, ".divx": {},
+	".dv": {}, ".f4v": {}, ".flv": {}, ".gvi": {}, ".gxf": {}, ".hevc": {},
+	".ismv": {}, ".m1v": {}, ".m2ts": {}, ".m2v": {}, ".m4v": {}, ".mkv": {},
+	".mov": {}, ".mp2v": {}, ".mp4": {}, ".mp4v": {}, ".mpg": {}, ".mpe": {},
+	".mpeg": {}, ".mpv": {}, ".mts": {}, ".mxf": {}, ".mxg": {}, ".nsv": {},
+	".nut": {}, ".nuv": {}, ".ogm": {}, ".ogv": {}, ".ogx": {}, ".qt": {},
+	".rm": {}, ".rmvb": {}, ".swf": {}, ".tod": {}, ".tp": {}, ".trp": {},
+	".ts": {}, ".tts": {}, ".vob": {}, ".vro": {}, ".webm": {}, ".wm": {},
+	".wmv": {}, ".wtv": {}, ".xesc": {}, ".y4m": {},
+}
 
 /*
 使用golang实现find <root> -type f 命令
@@ -71,28 +87,47 @@ func FindAllVideosInRoot(root string) []string {
 }
 
 func isVideo(fp string) bool {
-	file, _ := os.Open(fp)
-	defer file.Close()
-	head := make([]byte, 261)
-	file.Read(head)
+	// 第一步：忽略大小写按扩展名判断，开销最小，也能兼容文件头不规范的视频
 	ext := strings.ToLower(filepath.Ext(fp))
-	if filetype.IsVideo(head) {
+	if _, ok := videoExtensions[ext]; ok {
 		return true
-	} else if strings.ToLower(ext) == ".rmvb" {
-		return true
-	} else if strings.ToLower(ext) == ".rm" {
-		return true
-	} else if strings.ToLower(ext) == ".vob" {
-		return true
-	} else if strings.ToLower(ext) == ".flv" {
-		return true
-	} else if strings.ToLower(ext) == ".ts" {
-		return true
-	} else if strings.ToLower(ext) == ".m2ts" {
-		return true
-	} else if strings.ToLower(ext) == ".mp4" {
-		return true
-	}else {
+	}
+	// 第二步：读取文件头，用 magic number 判断
+	file, err := os.Open(fp)
+	if err == nil {
+		defer file.Close()
+		head := make([]byte, 261)
+		n, _ := file.Read(head)
+		if filetype.IsVideo(head[:n]) {
+			return true
+		}
+	}
+	// 第三步：ffprobe 兜底，直接检测文件里是否包含视频流，开销最大所以放最后
+	return hasVideoStream(fp)
+}
+
+// hasVideoStream 使用 ffprobe 检测文件中是否存在视频流；ffprobe 不存在时告警并退回 ffmpeg
+func hasVideoStream(fp string) bool {
+	if ffprobe, err := exec.LookPath("ffprobe"); err == nil {
+		out, _ := exec.Command(ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", fp).Output()
+		return strings.TrimSpace(string(out)) == "video"
+	}
+	warnFfprobeMissingOnce.Do(func() {
+		log.Printf("警告：未找到 ffprobe，已退回使用 ffmpeg 检测视频流")
+	})
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		warnFfmpegMissingOnce.Do(func() {
+			log.Printf("警告：未找到 ffmpeg，无法检测视频流，相关文件将被跳过")
+		})
 		return false
 	}
+	// ffmpeg 没有输出文件时必定以非 0 退出且信息都写在 stderr，所以只能解析输出内容
+	out, _ := exec.Command(ffmpeg, "-hide_banner", "-i", fp).CombinedOutput()
+	return strings.Contains(string(out), "Video:")
 }
+
+var (
+	warnFfprobeMissingOnce sync.Once
+	warnFfmpegMissingOnce  sync.Once
+)

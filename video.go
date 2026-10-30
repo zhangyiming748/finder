@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/h2non/filetype"
+	"github.com/h2non/filetype/matchers/isobmff"
 )
 
 // 常见视频扩展名，第一步仅凭扩展名即可认定是视频文件
@@ -34,6 +35,47 @@ var videoBasedImageExtensions = map[string]struct{}{
 	".mjpg": {}, ".mjpeg": {}, ".mpo": {}, // 单帧 Motion JPEG
 	".apng": {}, // PNG 动画
 	".gif":  {}, // GIF 动画
+}
+
+// ISO-BMFF（ftyp）容器中的静态图片 brand。AVIF / HEIF 即使扩展名被改成 .jpg，
+// filetype 也识别不出是图片，最终会被 ffprobe 当成视频流，因此需要自行解析 ftyp
+var stillImageBrands = map[string]struct{}{
+	"avif": {}, "avis": {}, "heic": {}, "heix": {}, "heim": {}, "heis": {},
+	"hevm": {}, "hevs": {}, "mif1": {}, "msf1": {},
+}
+
+func isStillImageContainer(head []byte) bool {
+	if !isobmff.IsISOBMFF(head) {
+		return false
+	}
+	majorBrand, _, compatibleBrands := isobmff.GetFtyp(head)
+	if _, ok := stillImageBrands[majorBrand]; ok {
+		return true
+	}
+	for _, brand := range compatibleBrands {
+		if _, ok := stillImageBrands[brand]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// 文件头是纯文本（TXT、CSV、Markdown、字幕等）时不可能是视频，
+// 直接排除，避免为每个文本文件启动一次 ffprobe / ffmpeg
+func isTextContent(head []byte) bool {
+	if len(head) == 0 {
+		return false
+	}
+	for _, b := range head {
+		switch {
+		case b == '\t' || b == '\n' || b == '\r' || b == '\v' || b == '\f':
+		case b >= 0x20 && b <= 0x7e:
+		case b >= 0x80: // UTF-8 的多字节字符
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 /*
@@ -115,12 +157,17 @@ func isVideo(fp string) bool {
 		head := make([]byte, 261)
 		n, _ := file.Read(head)
 		head = head[:n]
+		if n == 0 {
+			return false
+		}
 		if filetype.IsVideo(head) {
 			return true
 		}
 		// 图片（JPG/PNG 等）和音频（带封面图的 MP3 等）会被 ffprobe 识别出视频流，
 		// 文件头已明确判定类型的直接排除，避免兜底步骤误报
-		if filetype.IsImage(head) || filetype.IsAudio(head) {
+		if filetype.IsImage(head) || filetype.IsAudio(head) ||
+			filetype.IsDocument(head) || filetype.IsArchive(head) || filetype.IsFont(head) ||
+			isStillImageContainer(head) || isTextContent(head) {
 			return false
 		}
 	}

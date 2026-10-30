@@ -497,6 +497,20 @@ func TestFindAllVideosIgnoresImages(t *testing.T) {
 	writeTestFile(t, filepath.Join(tempDir, "photo1.jpg"), jpegBytes)
 	writeTestFile(t, filepath.Join(tempDir, "photo2.JPG"), jpegBytes)
 	writeTestFile(t, filepath.Join(tempDir, "photo3.avif"), avifBytes)
+	// 扩展名被改成 .jpg 的 AVIF：扩展名和文件头都识别不出，最容易漏判
+	writeTestFile(t, filepath.Join(tempDir, "photo4.jpg"), avifBytes)
+	writeTestFile(t, filepath.Join(tempDir, "video.mp4"), nil)
+
+	result := FindAllVideos(tempDir)
+	if len(result) != 1 || filepath.Base(result[0]) != "video.mp4" {
+		t.Fatalf("Expected only video.mp4, got %v", result)
+	}
+}
+
+func TestFindAllVideosIgnoresTextFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tempDir, "notes.txt"), []byte("hello world\nthis is a text file\n"))
+	writeTestFile(t, filepath.Join(tempDir, "data.csv"), []byte("name,size\nmovie,1024\n"))
 	writeTestFile(t, filepath.Join(tempDir, "video.mp4"), nil)
 
 	result := FindAllVideos(tempDir)

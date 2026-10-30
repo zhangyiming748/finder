@@ -24,6 +24,18 @@ var videoExtensions = map[string]struct{}{
 	".wmv": {}, ".wtv": {}, ".xesc": {}, ".y4m": {},
 }
 
+// 本质是图片、但由视频编码衍生或被 ffprobe/ffmpeg 解析成视频流的格式，兜底前必须排除
+var videoBasedImageExtensions = map[string]struct{}{
+	".avif": {}, ".avifs": {}, // AV1 静帧
+	".heic": {}, ".heif": {}, ".heics": {}, ".heifs": {}, // HEVC 静帧
+	".webp": {},             // VP8/VP9
+	".jxl":  {},             // JPEG XL
+	".jp2":  {}, ".jpx": {}, // JPEG 2000
+	".mjpg": {}, ".mjpeg": {}, ".mpo": {}, // 单帧 Motion JPEG
+	".apng": {}, // PNG 动画
+	".gif":  {}, // GIF 动画
+}
+
 /*
 使用golang实现find <root> -type f 命令
 */
@@ -92,14 +104,24 @@ func isVideo(fp string) bool {
 	if _, ok := videoExtensions[ext]; ok {
 		return true
 	}
+	// 视频编码衍生的图片（AVIF、HEIC 等）会被 ffprobe 当作视频流，这里直接排除
+	if _, ok := videoBasedImageExtensions[ext]; ok {
+		return false
+	}
 	// 第二步：读取文件头，用 magic number 判断
 	file, err := os.Open(fp)
 	if err == nil {
 		defer file.Close()
 		head := make([]byte, 261)
 		n, _ := file.Read(head)
-		if filetype.IsVideo(head[:n]) {
+		head = head[:n]
+		if filetype.IsVideo(head) {
 			return true
+		}
+		// 图片（JPG/PNG 等）和音频（带封面图的 MP3 等）会被 ffprobe 识别出视频流，
+		// 文件头已明确判定类型的直接排除，避免兜底步骤误报
+		if filetype.IsImage(head) || filetype.IsAudio(head) {
+			return false
 		}
 	}
 	// 第三步：ffprobe 兜底，直接检测文件里是否包含视频流，开销最大所以放最后

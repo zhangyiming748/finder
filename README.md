@@ -79,8 +79,8 @@ func main() {
 
 ### 视频（四级判断，按开销从小到大）
 
-1. **扩展名**：忽略大小写匹配常见视频扩展名（`.mp4`、`.mkv`、`.avi`、`.mov`、`.wmv`、`.flv`、`.rmvb`、`.ts`、`.m2ts`、`.webm` 等 50 余种），命中即返回
-2. **文件头**：读取前 261 字节，交给 `filetype.IsVideo` 判断 magic number
+1. **扩展名**：忽略大小写匹配常见视频扩展名（`.mp4`、`.mkv`、`.avi`、`.mov`、`.wmv`、`.flv`、`.rmvb`、`.ts`、`.m2ts`、`.webm` 等 50 余种），命中即返回；若命中的是视频编码衍生的图片扩展名（`.avif`、`.heic`、`.webp` 等，见下文）则直接排除
+2. **文件头**：读取前 261 字节，交给 `filetype.IsVideo` 判断 magic number；若识别为图片 / 音频则直接排除（见下文）
 3. **ffprobe**：执行 `ffprobe -select_streams v:0`，输出 `video` 即认为包含视频流
 4. **ffmpeg**：ffprobe 不存在时打印一次告警，改用 `ffmpeg -i`，从 stderr 中匹配 `Video:` 判断
 
@@ -89,6 +89,35 @@ func main() {
 > ffmpeg 在没有输出文件时会以非 0 退出码结束，所以第四步只解析输出内容，不依赖退出码。
 > 两个告警通过 `sync.Once` 只输出一次，避免扫描大目录时刷屏。
 
+### 为什么图片不会被误判成视频
+
+开启流探测后出现过误报：目录里只有 1 个视频和 2 张 JPG，`FindAllVideos` 却返回了 3 个路径。原因是 ffprobe / ffmpeg 会把静态图片当成视频流：
+
+```bash
+ffprobe -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 photo.jpg
+# video   ← image2 解复用器 + mjpeg 编码
+
+ffprobe -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 photo.avif
+# video   ← AV1 静帧，ftyp 容器被识别为 mov/mp4
+```
+
+由视频编码衍生的图片同样是这个行为：AVIF（AV1）、HEIC/HEIF（HEVC）、WebP（VP8/VP9）、JPEG XL、JPEG 2000，以及单帧 MJPEG、动画 PNG（APNG）和动画 GIF，都会得到 `codec_type=video`；带封面图的 MP3 还会多出一条 `attached_pic` 视频流。只靠流探测无法区分「真正的视频」和「图片 / 音频封面」，所以需要两层排除：
+
+1. **扩展名排除**：`videoBasedImageExtensions` 覆盖 `.avif`、`.avifs`、`.heic`、`.heif`、`.heics`、`.heifs`、`.webp`、`.jxl`、`.jp2`、`.jpx`、`.mjpg`、`.mjpeg`、`.mpo`、`.apng`、`.gif`，命中即返回 `false`，连文件头都不用读。
+2. **文件头排除**：读取前 261 字节后，若 `filetype.IsImage` / `filetype.IsAudio` 命中则返回 `false`，用于兜住扩展名被改掉的文件。
+
+第二层仍有盲区：`filetype` v1.1.3 只识别 `ftyp` 中带 `heic` brand 的 HEIF，识别不了 AVIF 的 `avif` brand（[image.go](image.go) 中 `.avif` 只能靠扩展名判断也是这个原因）。这正是 AVIF 等格式必须放进扩展名排除列表的原因。
+
+| 判定位置 | 结果 | 处理 |
+| --- | --- | --- |
+| 扩展名命中视频列表 | 视频 | 返回 `true` |
+| 扩展名命中衍生图片列表 | 图片 / 动画 | 返回 `false` |
+| 文件头 `filetype.IsVideo` | 视频 | 返回 `true` |
+| 文件头 `filetype.IsImage` / `IsAudio` | 图片 / 音频 | 返回 `false` |
+| 以上均无法识别 | 未知 | 进入 ffprobe / ffmpeg 兜底 |
+
+对应的回归测试是 `TestFindAllVideosIgnoresImages`：目录内放入 1 个 `.mp4`、两张真实 JPEG（含大写 `.JPG`）和一张真实 AVIF，断言只返回 1 个视频。
+
 ## 开发过程记录
 
 - **从 `find` 命令出发**：先把常用查询拆成「递归 / 仅当前层」× 「文件 / 文件夹 / 媒体类型」的组合，每个函数只做一件事，返回 `[]string` 而不是流式回调，调用方组合起来更简单。
@@ -96,7 +125,8 @@ func main() {
 - **为什么用 magic number**：只信任扩展名会漏掉改名文件，也容易被误改后缀的文件骗过；读取文件头是成本较低的折中方案。`filetype` 只读取固定长度的头部，不需要完整加载文件。
 - **视频识别的演进**：最初只靠 `filetype` + 少量无法识别的扩展名硬编码。遇到不规范 AVI 后改为「扩展名优先、文件头其次、外部工具兜底」的分层策略，既保证常见场景的速度，也覆盖了文件头异常的文件。
 - **外部工具兜底**：`ffprobe` 是首选，因为输出结构化、易解析；考虑到存在只安装了 `ffmpeg` 的环境，增加了 ffmpeg 回退分支，并在 `PATH` 中找不到可执行文件时给出告警而不是静默跳过。
-- **测试**：`module_test.go` 使用 `t.TempDir()` 构造临时目录树，覆盖递归 / 仅当前层两种行为；媒体测试使用真实扩展名的空文件验证路径筛选逻辑。
+- **流探测的误报修复**：兜底上线后发现 JPG 也会被判成视频，原因是 ffprobe 把静态图片解码成视频流。由于 AVIF、HEIC 等由视频编码衍生的图片连文件头都无法被 `filetype` 识别，最终采用「扩展名排除列表 + 文件头图片 / 音频排除」两层防护，让流探测只处理真正未知的文件。
+- **测试**：`module_test.go` 使用 `t.TempDir()` 构造临时目录树，覆盖递归 / 仅当前层两种行为；媒体测试写入最小的真实文件头（PNG / JPEG / GIF、ID3 / RIFF-WAVE / OggS），保证 `filetype` 能真实识别；视频部分额外用真实 JPEG 和真实 AVIF 做误判回归。
 
 ## 项目结构
 

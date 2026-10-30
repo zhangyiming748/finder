@@ -1,6 +1,7 @@
 package finder
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -475,5 +476,31 @@ func TestFindAllAudiosInRoot(t *testing.T) {
 		if audioMap[expectedPath] {
 			t.Errorf("Subdirectory audio file %s should not be in result", expectedPath)
 		}
+	}
+}
+
+func TestFindAllVideosIgnoresImages(t *testing.T) {
+	// 合法的 1x1 JPEG：ffprobe 会把它解析成 mjpeg 视频流，不能因此被判为视频
+	const jpegBase64 = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=="
+	// 合法的 AVIF（AV1 静帧）：ffprobe 会把它解析成 av1 视频流，且 filetype 无法识别它的文件头
+	const avifBase64 = "AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAAD5bWV0YQAAAAAAAAAvaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAFBpY3R1cmVIYW5kbGVyAAAAAA5waXRtAAAAAAABAAAAHmlsb2MAAAAARAAAAQABAAAAAQAAASEAAAAkAAAAKGlpbmYAAAAAAAEAAAAaaW5mZQIAAAAAAQAAYXYwMUNvbG9yAAAAAGppcHJwAAAAS2lwY28AAAAUaXNwZQAAAAAAAAAQAAAAEAAAABBwaXhpAAAAAAMICAgAAAAMYXYxQ4EADAAAAAATY29scm5jbHgAAgACAAIAAAAAF2lwbWEAAAAAAAAAAQABBAECgwQAAAAsbWRhdAoKAgAABUz/xq+QBDIWEACXgBBAggAAEABcEytNbG+TY8nR6A=="
+	jpegBytes, err := base64.StdEncoding.DecodeString(jpegBase64)
+	if err != nil {
+		t.Fatalf("Failed to decode jpeg fixture: %v", err)
+	}
+	avifBytes, err := base64.StdEncoding.DecodeString(avifBase64)
+	if err != nil {
+		t.Fatalf("Failed to decode avif fixture: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	writeTestFile(t, filepath.Join(tempDir, "photo1.jpg"), jpegBytes)
+	writeTestFile(t, filepath.Join(tempDir, "photo2.JPG"), jpegBytes)
+	writeTestFile(t, filepath.Join(tempDir, "photo3.avif"), avifBytes)
+	writeTestFile(t, filepath.Join(tempDir, "video.mp4"), nil)
+
+	result := FindAllVideos(tempDir)
+	if len(result) != 1 || filepath.Base(result[0]) != "video.mp4" {
+		t.Fatalf("Expected only video.mp4, got %v", result)
 	}
 }

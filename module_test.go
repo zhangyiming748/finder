@@ -8,12 +8,14 @@ import (
 	"testing"
 )
 
-// 最小可识别的文件头，让 filetype 能把测试文件识别为图片 / 音频
+// 最小可识别的文件头，用于验证扩展名与内容不一致时的 mimetype 回退判断
 var (
 	pngHeader  = []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
 	jpegHeader = []byte{0xFF, 0xD8, 0xFF, 0xE0}
 	gifHeader  = []byte("GIF89a")
-	mp3Header  = []byte("ID3\x04\x00\x00\x00\x00\x00\x00")
+	mp3Header  = []byte("ID3\x04\x00\x00\x00\x00\x00\x01")
+	mp4Header  = []byte("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41")
+	avifHeader = []byte("\x00\x00\x00\x18ftypavif")
 	wavHeader  = []byte("RIFF\x24\x00\x00\x00WAVEfmt ")
 	oggHeader  = []byte("OggS\x00\x02\x00\x00")
 )
@@ -271,7 +273,7 @@ func TestFindAllImages(t *testing.T) {
 		t.Fatalf("Failed to create sub directory: %v", err)
 	}
 
-	// Step 4: 创建图像文件（写入真实文件头，保证能被 filetype 识别）
+	// Step 4: 创建图像文件（写入真实文件头，与扩展名保持一致）
 	for _, file := range imageFiles {
 		fullPath := filepath.Join(tempDir, file)
 		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
@@ -324,13 +326,13 @@ func TestFindAllImagesInRoot(t *testing.T) {
 	rootImageFiles := []string{"image1.jpg", "image2.png"}
 	subImageFiles := []string{"sub/image3.gif"}
 
-	// Step 4: 创建根目录图像文件（写入真实文件头，保证能被 filetype 识别）
+	// Step 4: 创建根目录图像文件（写入真实文件头，与扩展名保持一致）
 	for _, file := range rootImageFiles {
 		fullPath := filepath.Join(tempDir, file)
 		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
-	// Step 5: 创建子目录图像文件（写入真实文件头，保证能被 filetype 识别）
+	// Step 5: 创建子目录图像文件（写入真实文件头，与扩展名保持一致）
 	for _, file := range subImageFiles {
 		fullPath := filepath.Join(tempDir, file)
 		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
@@ -382,7 +384,7 @@ func TestFindAllAudios(t *testing.T) {
 		t.Fatalf("Failed to create sub directory: %v", err)
 	}
 
-	// Step 4: 创建音频文件（写入真实文件头，保证能被 filetype 识别）
+	// Step 4: 创建音频文件（写入真实文件头，与扩展名保持一致）
 	for _, file := range audioFiles {
 		fullPath := filepath.Join(tempDir, file)
 		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
@@ -435,13 +437,13 @@ func TestFindAllAudiosInRoot(t *testing.T) {
 	rootAudioFiles := []string{"audio1.mp3", "audio2.wav"}
 	subAudioFiles := []string{"sub/audio3.ogg"}
 
-	// Step 4: 创建根目录音频文件（写入真实文件头，保证能被 filetype 识别）
+	// Step 4: 创建根目录音频文件（写入真实文件头，与扩展名保持一致）
 	for _, file := range rootAudioFiles {
 		fullPath := filepath.Join(tempDir, file)
 		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
 	}
 
-	// Step 5: 创建子目录音频文件（写入真实文件头，保证能被 filetype 识别）
+	// Step 5: 创建子目录音频文件（写入真实文件头，与扩展名保持一致）
 	for _, file := range subAudioFiles {
 		fullPath := filepath.Join(tempDir, file)
 		writeTestFile(t, fullPath, mediaHeader(filepath.Ext(file)))
@@ -480,9 +482,9 @@ func TestFindAllAudiosInRoot(t *testing.T) {
 }
 
 func TestFindAllVideosIgnoresImages(t *testing.T) {
-	// 合法的 1x1 JPEG：ffprobe 会把它解析成 mjpeg 视频流，不能因此被判为视频
+	// 合法的 1x1 JPEG：不能被当成视频
 	const jpegBase64 = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=="
-	// 合法的 AVIF（AV1 静帧）：ffprobe 会把它解析成 av1 视频流，且 filetype 无法识别它的文件头
+	// 合法的 AVIF（AV1 静帧），同样不能被当成视频
 	const avifBase64 = "AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAAD5bWV0YQAAAAAAAAAvaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAFBpY3R1cmVIYW5kbGVyAAAAAA5waXRtAAAAAAABAAAAHmlsb2MAAAAARAAAAQABAAAAAQAAASEAAAAkAAAAKGlpbmYAAAAAAAEAAAAaaW5mZQIAAAAAAQAAYXYwMUNvbG9yAAAAAGppcHJwAAAAS2lwY28AAAAUaXNwZQAAAAAAAAAQAAAAEAAAABBwaXhpAAAAAAMICAgAAAAMYXYxQ4EADAAAAAATY29scm5jbHgAAgACAAIAAAAAF2lwbWEAAAAAAAAAAQABBAECgwQAAAAsbWRhdAoKAgAABUz/xq+QBDIWEACXgBBAggAAEABcEytNbG+TY8nR6A=="
 	jpegBytes, err := base64.StdEncoding.DecodeString(jpegBase64)
 	if err != nil {
@@ -497,7 +499,7 @@ func TestFindAllVideosIgnoresImages(t *testing.T) {
 	writeTestFile(t, filepath.Join(tempDir, "photo1.jpg"), jpegBytes)
 	writeTestFile(t, filepath.Join(tempDir, "photo2.JPG"), jpegBytes)
 	writeTestFile(t, filepath.Join(tempDir, "photo3.avif"), avifBytes)
-	// 扩展名被改成 .jpg 的 AVIF：扩展名和文件头都识别不出，最容易漏判
+	// 扩展名被改成 .jpg 的 AVIF：应按扩展名归入图片，不能判为视频
 	writeTestFile(t, filepath.Join(tempDir, "photo4.jpg"), avifBytes)
 	writeTestFile(t, filepath.Join(tempDir, "video.mp4"), nil)
 
@@ -516,5 +518,33 @@ func TestFindAllVideosIgnoresTextFiles(t *testing.T) {
 	result := FindAllVideos(tempDir)
 	if len(result) != 1 || filepath.Base(result[0]) != "video.mp4" {
 		t.Fatalf("Expected only video.mp4, got %v", result)
+	}
+}
+
+func TestMediaDetectionFallsBackToMIMEType(t *testing.T) {
+	tempDir := t.TempDir()
+	// 扩展名全部写错为 .txt / .dat，只能靠文件内容识别
+	writeTestFile(t, filepath.Join(tempDir, "movie.txt"), mp4Header)
+	writeTestFile(t, filepath.Join(tempDir, "photo.txt"), jpegHeader)
+	writeTestFile(t, filepath.Join(tempDir, "song.txt"), mp3Header)
+	writeTestFile(t, filepath.Join(tempDir, "picture.dat"), avifHeader)
+
+	videos := FindAllVideos(tempDir)
+	if len(videos) != 1 || filepath.Base(videos[0]) != "movie.txt" {
+		t.Fatalf("Expected only movie.txt as video, got %v", videos)
+	}
+
+	images := FindAllImages(tempDir)
+	if len(images) != 2 {
+		t.Fatalf("Expected photo.txt and picture.dat as images, got %v", images)
+	}
+	imageMap := map[string]bool{filepath.Base(images[0]): true, filepath.Base(images[1]): true}
+	if !imageMap["photo.txt"] || !imageMap["picture.dat"] {
+		t.Fatalf("Unexpected image result: %v", images)
+	}
+
+	audios := FindAllAudios(tempDir)
+	if len(audios) != 1 || filepath.Base(audios[0]) != "song.txt" {
+		t.Fatalf("Expected only song.txt as audio, got %v", audios)
 	}
 }

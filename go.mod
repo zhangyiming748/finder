@@ -2,4 +2,4 @@ module github.com/zhangyiming748/finder
 
 go 1.26.1
 
-require github.com/h2non/filetype v1.1.3
+require github.com/gabriel-vasile/mimetype v1.4.16
